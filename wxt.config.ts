@@ -23,5 +23,13 @@ export default defineConfig({
         48: 'icon/48.png',
       },
     },
+    // Required for ExtPay onPaid callback to work
+    content_scripts: [
+      {
+        matches: ['https://extensionpay.com/*'],
+        js: ['extpay-content.js'],
+        run_at: 'document_start',
+      },
+    ],
   },
 });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowUpDown, History, RefreshCw, Star, X } from 'lucide-react';
+import { ArrowUpDown, History, RefreshCw, Settings, X, Crown } from 'lucide-react';
 import { 
   getCurrencyList, 
   getRates, 
@@ -15,8 +15,13 @@ import {
   addRecentCurrency,
   addToHistory,
   getHistory,
+  getSettings,
+  getQuickAccessLimit,
+  getHistoryLimit,
   type ConversionEntry 
 } from '@/src/lib/storage';
+import { isPro as checkIsPro } from '@/src/lib/payment';
+import { SettingsModal } from '@/src/components/SettingsModal';
 import './App.css';
 
 function App() {
@@ -32,6 +37,28 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<ConversionEntry[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+
+  // Apply theme to document
+  useEffect(() => {
+    const applyTheme = () => {
+      const root = document.documentElement;
+      if (theme === 'system') {
+        root.removeAttribute('data-theme');
+      } else {
+        root.setAttribute('data-theme', theme);
+      }
+    };
+    
+    // Only apply theme if Pro, otherwise force light
+    if (isPro) {
+      applyTheme();
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  }, [theme, isPro]);
 
   // Load initial data
   useEffect(() => {
@@ -40,11 +67,16 @@ function App() {
         setLoading(true);
         setError(null);
         
+        // Load Pro status
+        const proStatus = await checkIsPro();
+        setIsPro(proStatus);
+        
         // Load preferences
         const prefs = await getPreferences();
         setFromCurrency(prefs.fromCurrency);
         setToCurrency(prefs.toCurrency);
         setRecentCurrencies(prefs.recentCurrencies);
+        setTheme(prefs.theme);
         
         // Load currencies list
         const currencyList = await getCurrencyList();
@@ -105,7 +137,7 @@ function App() {
   const handleFromCurrencyChange = async (currency: string) => {
     setFromCurrency(currency);
     await savePreferences({ fromCurrency: currency });
-    await addRecentCurrency(currency);
+    await addRecentCurrency(currency, isPro);
     await fetchRates(currency);
     
     const prefs = await getPreferences();
@@ -115,10 +147,15 @@ function App() {
   const handleToCurrencyChange = async (currency: string) => {
     setToCurrency(currency);
     await savePreferences({ toCurrency: currency });
-    await addRecentCurrency(currency);
+    await addRecentCurrency(currency, isPro);
     
     const prefs = await getPreferences();
     setRecentCurrencies(prefs.recentCurrencies);
+  };
+
+  const handleThemeChange = async (newTheme: 'light' | 'dark' | 'system') => {
+    setTheme(newTheme);
+    await savePreferences({ theme: newTheme });
   };
 
   const swapCurrencies = async () => {
@@ -139,7 +176,7 @@ function App() {
         from: fromCurrency,
         to: toCurrency,
         result,
-      });
+      }, isPro);
       const hist = await getHistory();
       setHistory(hist);
     }
@@ -178,6 +215,7 @@ function App() {
           <div className="logo">
             <span className="logo-icon">$</span>
             <span className="logo-text">QuickCurrency</span>
+            {isPro && <span className="pro-badge"><Crown size={12} /></span>}
           </div>
         </div>
         <div className="header-actions">
@@ -196,6 +234,13 @@ function App() {
           >
             <RefreshCw size={18} className={loading ? 'spinning' : ''} />
           </button>
+          <button 
+            className="icon-btn" 
+            onClick={() => setShowSettings(true)}
+            title="Settings"
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </header>
 
@@ -208,12 +253,15 @@ function App() {
 
       {showHistory ? (
         <div className="history-panel">
-          <h3>Recent Conversions</h3>
+          <h3>
+            Recent Conversions
+            {!isPro && <span className="limit-hint">(showing {getHistoryLimit(isPro)} max)</span>}
+          </h3>
           {history.length === 0 ? (
             <p className="empty-history">No conversions yet</p>
           ) : (
             <ul className="history-list">
-              {history.slice(0, 10).map((entry) => (
+              {history.slice(0, getHistoryLimit(isPro)).map((entry) => (
                 <li key={entry.id} className="history-item">
                   <span className="history-amount">
                     {getCurrencySymbol(entry.from)}{formatCurrency(entry.amount, entry.from)} {entry.from}
@@ -309,9 +357,12 @@ function App() {
 
           {recentCurrencies.length > 0 && (
             <div className="quick-currencies">
-              <label>Quick Access</label>
+              <label>
+                Quick Access
+                {!isPro && <span className="limit-hint">({getQuickAccessLimit(isPro)} max)</span>}
+              </label>
               <div className="quick-currency-list">
-                {recentCurrencies.slice(0, 5).map((code) => (
+                {recentCurrencies.slice(0, getQuickAccessLimit(isPro)).map((code) => (
                   <button
                     key={code}
                     className={`quick-currency-btn ${code === toCurrency ? 'active' : ''}`}
@@ -334,6 +385,14 @@ function App() {
         )}
         <span className="powered-by">200+ currencies</span>
       </footer>
+
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        isPro={isPro}
+        theme={theme}
+        onThemeChange={handleThemeChange}
+      />
     </div>
   );
 }
