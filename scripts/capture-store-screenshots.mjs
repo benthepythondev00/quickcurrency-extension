@@ -48,6 +48,10 @@ async function main() {
   // Wait for converter to be ready
   await page.waitForSelector('.converter', { timeout: 15000 });
 
+  // Set viewport to match popup size (will be centered later by resize script)
+  // The popup is 360px wide, setting a bit larger to get nice padding
+  await page.setViewportSize({ width: 400, height: 520 });
+
   // Screenshot 1: Main converter view (USD to EUR, $1000)
   console.log('Capturing screenshot 1: Main Converter...');
   const amountInput = page.locator('.amount-input input[type="number"]');
@@ -128,7 +132,7 @@ async function main() {
 
   console.log('\nScreenshots saved to:', outputDir);
   console.log('Files:');
-  fs.readdirSync(outputDir).filter(f => f.endsWith('.png')).forEach(f => console.log(`  - ${f}`));
+  fs.readdirSync(outputDir).filter(f => f.endsWith('.png') && !f.includes('resized')).forEach(f => console.log(`  - ${f}`));
 
   await context.close();
   
